@@ -10,13 +10,20 @@ func TestNewConfig(t *testing.T) {
 	if err != nil {
 		t.Errorf("%v", err)
 	}
+
+	t.Logf("%#v", config)
+}
+
+func TestNewClient(t *testing.T) {
+	config, err := NewConfig("example/mihari.yml")
+	if err != nil {
+		t.Errorf("%v", err)
+	}
 	client, err := NewClient(config)
 	if err != nil {
 		t.Errorf("%v", err)
 	}
 	defer client.Close()
-
-	t.Logf("%#v", client)
 }
 
 func TestPort_GetIMEI(t *testing.T) {
@@ -50,6 +57,7 @@ func TestGetLTECellInfo(t *testing.T) {
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2734811,235,6100,19,3,3,1684,-81,-10,-54,19,50`,
 			LTECellInfo: LTECellInfo{
+				RAT:            "LTE",
 				State:          "NOCONN",
 				IsTDD:          "FDD",
 				MCC:            440,
@@ -71,6 +79,7 @@ func TestGetLTECellInfo(t *testing.T) {
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",-,-,-,-,-,-,-,-,-,-,-,-,-,-`,
 			LTECellInfo: LTECellInfo{
+				RAT:            "LTE",
 				State:          "NOCONN",
 				IsTDD:          "FDD",
 				MCC:            0,
@@ -92,6 +101,7 @@ func TestGetLTECellInfo(t *testing.T) {
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2C81851,193,1850,3,5,5,1694,-100,-11,-67,11,29`,
 			LTECellInfo: LTECellInfo{
+				RAT:            "LTE",
 				State:          "NOCONN",
 				IsTDD:          "FDD",
 				MCC:            440,

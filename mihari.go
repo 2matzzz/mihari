@@ -1,9 +1,12 @@
 package mihari
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -16,15 +19,20 @@ import (
 
 var (
 	defaultSerialReadTimeout   = time.Second
+	httpClient                 = http.Client{}
+	applicationJSONHeader      = "application/json"
 	imeiRegexp                 = regexp.MustCompile(`[0-9]{15}`)
 	imsiRegexp                 = regexp.MustCompile(`[0-9]{15}`)
 	iccidRegexp                = regexp.MustCompile(`([0-9]{19})F`)
 	eg25gModelRegexp           = regexp.MustCompile(`(?P<manufacture>.*)\r\n(?P<model>.*)\r\nRevision: (?P<firmware_revision>.*)\r\n`)
 	eg25gQuecCellModeRegexp    = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>(GSM|WCDMA|LTE|CDMAHDR|TDSCDMA))"`)
-	eg25gQuecCellLTEInfoRegexp = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","LTE","(?P<is_tdd>(TDD|FDD))",(?P<mcc>(-|\d{3})),(?P<mnc>(-|\d+)),(?P<cellid>(-|[0-9A-Z]+)),(?P<pcid>(-|\d+)),(?P<earfcn>(-|\d+)),(?P<freq_band_ind>(-|\d+)),(?P<ul_bandwidth>(-|[0-5]{1})),(?P<dl_bandwidth>(-|[0-5]{1})),(?P<tac>(-|\d+)),(?P<rsrp>(-(\d+)?)),(?P<rsrq>(-(\d+)?)),(?P<rssi>(-(\d+)?)),(?P<sinr>(-|\d+)),(?P<srxlev>(-|\d+))`)
+	eg25gQuecCellLTEInfoRegexp = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>(GSM|WCDMA|LTE|CDMAHDR|TDSCDMA))","(?P<is_tdd>(TDD|FDD))",(?P<mcc>(-|\d{3})),(?P<mnc>(-|\d+)),(?P<cellid>(-|[0-9A-Z]+)),(?P<pcid>(-|\d+)),(?P<earfcn>(-|\d+)),(?P<freq_band_ind>(-|\d+)),(?P<ul_bandwidth>(-|[0-5]{1})),(?P<dl_bandwidth>(-|[0-5]{1})),(?P<tac>(-|\d+)),(?P<rsrp>(-(\d+)?)),(?P<rsrq>(-(\d+)?)),(?P<rssi>(-(\d+)?)),(?P<sinr>(-|\d+)),(?P<srxlev>(-|\d+))`)
 )
 
-const defaultConfigPath = "/etc/mihari.conf"
+const (
+	soracomHarvestHost = "http://uni.soracom.io"
+	defaultConfigPath  = "/etc/mihari.conf"
+)
 
 type Client struct {
 	config *Config
@@ -65,6 +73,7 @@ type CellInfo interface {
 }
 
 type LTECellInfo struct {
+	Time           int64  `json:"time"` // epoch
 	RAT            string `json:"rat"`
 	State          string `json:"state"`
 	IsTDD          string `json:"is_tdd"`
@@ -134,7 +143,7 @@ func (client *Client) setPort() error {
 	var err error
 	client.modem.Port, err = serial.Open(client.config.Path, &serial.Mode{})
 	if err != nil {
-		return fmt.Errorf("%v could not open, %#v", client.config.Path, err)
+		return fmt.Errorf("%v could not open, %v", client.config.Path, err)
 	}
 
 	if err := client.setPortMode(); err != nil {
@@ -172,20 +181,30 @@ func (client *Client) setPortReadTimeout() error {
 	return nil
 }
 
-// func (client *Client) GetModemStatus() Modem {
-// 	return client.config.Modem
-// }
-
 func (client *Client) GetInterval() int {
 	return client.config.Interval
 }
 
 func (client *Client) Run() {
-	go func() {
-		for now := range time.Tick(time.Second) {
-			fmt.Println(now)
+	interval := time.Duration(client.config.Interval * int(time.Second))
+	ticker := time.NewTicker(interval)
+	for range ticker.C {
+		//TODO: fetch
+		if err := client.fetchCellInfo(); err != nil {
+			log.Printf("cell info fetch error, %v", err)
 		}
-	}()
+
+		//TODO: forward
+		body, err := json.Marshal(client.CellInfo)
+		if err != nil {
+			log.Printf("json error, %v", err)
+		}
+		//TODO: retry, expnetioal backoff w/ jitter
+		resp, err := httpClient.Post(soracomHarvestHost, applicationJSONHeader, bytes.NewBuffer(body))
+		ioutil.ReadAll(resp.Body)
+
+		log.Println(string(body), err)
+	}
 }
 
 func (client *Client) Close() {
@@ -316,6 +335,8 @@ func getLTECellInfo(buff string) (LTECellInfo, error) {
 			result[name] = match[i]
 		}
 	}
+	lteCellInfo.Time = time.Now().UTC().UnixMilli()
+	lteCellInfo.RAT = result["rat"]
 	lteCellInfo.State = result["state"]
 	lteCellInfo.IsTDD = result["is_tdd"]
 	if result["mcc"] != "-" {
@@ -503,6 +524,11 @@ func (client *Client) fetchCellInfo() error {
 			break
 		}
 	}
+	err = client.clearPortBuffer()
+	if err != nil {
+		return err
+	}
+
 	client.modem.RAT, err = getQuecCellRAT(string(buff))
 	if err != nil {
 		return err

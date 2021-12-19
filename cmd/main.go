@@ -28,28 +28,16 @@ import (
 // }
 
 func main() {
-	// conf := mihari.NewConfig()
-	// var ports []Port
-
 	//TODO: logger
-
-	// logger := &log.Logger{}
 	config, err := mihari.NewConfig("example/mihari.yml")
 	if err != nil {
 		log.Fatalln(err)
-		// logger.Fatalln(err)
 	}
 	client, err := mihari.NewClient(config)
 	if err != nil {
 		log.Fatalln(err)
-		// logger.Fatalln(err)
 	}
 	defer client.Close()
-
-	if err := client.Check(); err != nil {
-		log.Fatalln(err)
-		// logger.Fatalln(err)
-	}
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
@@ -58,5 +46,6 @@ func main() {
 		client.Close()
 		os.Exit(1)
 	}()
-	// client.Run()
+
+	client.Run()
 }
