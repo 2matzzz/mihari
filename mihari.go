@@ -18,15 +18,11 @@ import (
 )
 
 var (
-	defaultSerialReadTimeout   = time.Second
-	httpClient                 = http.Client{}
-	applicationJSONHeader      = "application/json"
-	imeiRegexp                 = regexp.MustCompile(`[0-9]{15}`)
-	imsiRegexp                 = regexp.MustCompile(`[0-9]{15}`)
-	iccidRegexp                = regexp.MustCompile(`([0-9]{19})F`)
-	eg25gModelRegexp           = regexp.MustCompile(`(?P<manufacture>.*)\r\n(?P<model>.*)\r\nRevision: (?P<firmware_revision>.*)\r\n`)
-	eg25gQuecCellModeRegexp    = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>(GSM|WCDMA|LTE|CDMAHDR|TDSCDMA))"`)
-	eg25gQuecCellLTEInfoRegexp = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>(GSM|WCDMA|LTE|CDMAHDR|TDSCDMA))","(?P<is_tdd>(TDD|FDD))",(?P<mcc>(-|\d{3})),(?P<mnc>(-|\d+)),(?P<cellid>(-|[0-9A-Z]+)),(?P<pcid>(-|\d+)),(?P<earfcn>(-|\d+)),(?P<freq_band_ind>(-|\d+)),(?P<ul_bandwidth>(-|[0-5]{1})),(?P<dl_bandwidth>(-|[0-5]{1})),(?P<tac>(-|\d+)),(?P<rsrp>(-(\d+)?)),(?P<rsrq>(-(\d+)?)),(?P<rssi>(-(\d+)?)),(?P<sinr>(-|\d+)),(?P<srxlev>(-|\d+))`)
+	defaultSerialReadTimeout = time.Second
+	httpClient               = http.Client{}
+	imeiRegexp               = regexp.MustCompile(`[0-9]{15}`)
+	imsiRegexp               = regexp.MustCompile(`[0-9]{15}`)
+	iccidRegexp              = regexp.MustCompile(`([0-9]{19})F`)
 )
 
 const (
@@ -36,44 +32,43 @@ const (
 
 type Client struct {
 	config *Config
-	// logger    *log.Logger
-	// forwarder interface{}
+	// logger    *log.Logger //TODO: logging
 	modem *Modem
 	CellInfo
 }
 
+type CellInfo interface {
+}
+
 type Modem struct {
-	serial.Port      `json:"-"`
-	Manufacture      string `json:"manufacture"`
-	Model            string `json:"model"`
-	FirmwareRevision string `json:"firmware_revision"`
-	IMEI             string `json:"imei"`
-	IMSI             string `json:"imsi"`
-	ICCID            string `json:"iccid"`
-	RAT              string `json:"rat"`
+	serial.Port
+	Manufacture      string
+	Model            string
+	FirmwareRevision string
+	IMEI             string
+	IMSI             string
+	ICCID            string
+	RAT              string
 }
 
 // type Modems map[string]interface{}
 type Config struct {
 	ConfigFilePath string
 	Verbose        bool
-	Name           string `yaml:"name" json:"name"`
-	Path           string `yaml:"path" json:"path"`
-	Interval       int    `yaml:"interval" json:"interval"`
-	NewLineCode    string `yaml:"newline_code" json:"-"`
-	Parity         string `yaml:"parity" json:"parity"`
-	Stopbits       int    `yaml:"stopbits" json:"stopbits"`
-	Baurdrate      int    `yaml:"baudrate" json:"baudrate"`
-	Databits       int    `yaml:"databits" json:"databits"`
-	ReadTimeout    int    `yaml:"read_timeout" json:"read_timeout"`
+	Name           string `yaml:"name"`
+	Path           string `yaml:"path"`
+	Interval       int    `yaml:"interval"`
+	NewLineCode    string `yaml:"newline_code"`
+	Parity         string `yaml:"parity"`
+	Stopbits       int    `yaml:"stopbits"`
+	Baurdrate      int    `yaml:"baudrate"`
+	Databits       int    `yaml:"databits"`
+	ReadTimeout    int    `yaml:"read_timeout"`
 	Forwarder      string `yaml:"forwarder"`
 }
 
-type CellInfo interface {
-}
-
 type LTECellInfo struct {
-	Time           int64  `json:"time"` // epoch
+	Timestamp      int64  `json:"timestamp"` // epoch milli sec
 	RAT            string `json:"rat"`
 	State          string `json:"state"`
 	IsTDD          string `json:"is_tdd"`
@@ -93,6 +88,7 @@ type LTECellInfo struct {
 	Srxlev         int    `json:"srxlev,omitempty"`
 }
 
+//TODO: Support 3G
 type WCDMACellInfo struct {
 	MCC    int
 	MNC    int
@@ -124,11 +120,21 @@ func loadConfig(path string) (*Config, error) {
 	if err := yaml.Unmarshal(configData, config); err != nil {
 		return config, fmt.Errorf("config parse error, %s", err)
 	}
-	// if _, err := toml.Decode(string(configData), config); err != nil {
-	// 	return config, err
-	// }
 
+	if err := config.Validate(); err != nil {
+		return config, fmt.Errorf("config validation error, got %s", err)
+	}
 	return config, nil
+}
+
+//TODO: improve validate
+func (config *Config) Validate() error {
+	if config.Interval < 60 {
+		specifiedInterval := config.Interval
+		config.Interval = 60
+		return fmt.Errorf("interval should specify 60 or over, got %d", specifiedInterval)
+	}
+	return nil
 }
 
 func loadConfigFile(path string) ([]byte, error) {
@@ -181,29 +187,42 @@ func (client *Client) setPortReadTimeout() error {
 	return nil
 }
 
-func (client *Client) GetInterval() int {
-	return client.config.Interval
+func (client *Client) Run() {
+	interval := time.Duration(60 * time.Second)
+	ticker := time.NewTicker(interval)
+	client.Exec()
+	for range ticker.C {
+		client.Exec()
+	}
 }
 
-func (client *Client) Run() {
-	interval := time.Duration(client.config.Interval * int(time.Second))
-	ticker := time.NewTicker(interval)
-	for range ticker.C {
-		//TODO: fetch
-		if err := client.fetchCellInfo(); err != nil {
-			log.Printf("cell info fetch error, %v", err)
+func (client *Client) Exec() {
+	// fetch cell info
+	if err := client.fetchCellInfo(); err != nil {
+		log.Printf("cell info fetch error, %v", err)
+	}
+
+	// forward
+	body, err := json.Marshal(client.CellInfo)
+	if err != nil {
+		log.Printf("json error, %v", err)
+	}
+
+	switch client.config.Forwarder {
+	case "harvest":
+		var timestamp int64
+		switch client.CellInfo.(type) {
+		case LTECellInfo:
+			timestamp = client.CellInfo.(LTECellInfo).Timestamp
 		}
 
-		//TODO: forward
-		body, err := json.Marshal(client.CellInfo)
-		if err != nil {
-			log.Printf("json error, %v", err)
-		}
 		//TODO: retry, expnetioal backoff w/ jitter
-		resp, err := httpClient.Post(soracomHarvestHost, applicationJSONHeader, bytes.NewBuffer(body))
+		req, _ := http.NewRequest("POST", soracomHarvestHost, bytes.NewBuffer(body))
+		req.Header.Set("x-soracom-timestamp", fmt.Sprintf("%d", timestamp))
+		req.Header.Set("content-type", "application/json")
+		resp, _ := httpClient.Do(req)
 		ioutil.ReadAll(resp.Body)
-
-		log.Println(string(body), err)
+		// log.Println(string(body), err)
 	}
 }
 
@@ -229,13 +248,6 @@ func NewCientWithConfig(config *Config) (*Client, error) {
 		return client, err
 	}
 	return client, nil
-}
-
-type Forwarder interface {
-	Send()
-}
-
-type SORACOMHarvestClient struct {
 }
 
 func (client *Client) Check() error {
@@ -321,7 +333,6 @@ func getQuecCellRAT(buff string) (string, error) {
 }
 
 func getLTECellInfo(buff string) (LTECellInfo, error) {
-	// lteInfo := make(map[string]string)
 	var lteCellInfo LTECellInfo
 	var err error
 	match := eg25gQuecCellLTEInfoRegexp.FindStringSubmatch(buff)
@@ -335,7 +346,7 @@ func getLTECellInfo(buff string) (LTECellInfo, error) {
 			result[name] = match[i]
 		}
 	}
-	lteCellInfo.Time = time.Now().UTC().UnixMilli()
+	lteCellInfo.Timestamp = time.Now().UTC().UnixMilli()
 	lteCellInfo.RAT = result["rat"]
 	lteCellInfo.State = result["state"]
 	lteCellInfo.IsTDD = result["is_tdd"]
@@ -425,7 +436,11 @@ func getLTECellInfo(buff string) (LTECellInfo, error) {
 }
 
 func (client *Client) fetchIMEI() error {
-	atCommand := "AT+CGSN"
+	var atCommand string
+	switch model := strings.ToLower(client.modem.Model); model {
+	case "eg25":
+		atCommand = eg25gIMEIATCommand
+	}
 	_, err := client.modem.Port.Write([]byte(atCommand + "\r\n"))
 	if err != nil {
 		return fmt.Errorf("%s command fail, %s", atCommand, err)
@@ -452,7 +467,11 @@ func (client *Client) fetchIMEI() error {
 }
 
 func (client *Client) fetchIMSI() error {
-	atCommand := "AT+CIMI"
+	var atCommand string
+	switch model := strings.ToLower(client.modem.Model); model {
+	case "eg25":
+		atCommand = eg25gIMSIATCommand
+	}
 	_, err := client.modem.Port.Write([]byte(atCommand + "\r\n"))
 	if err != nil {
 		return fmt.Errorf("%s command fail, %s", atCommand, err)
@@ -480,7 +499,11 @@ func (client *Client) fetchIMSI() error {
 }
 
 func (client *Client) fetchICCID() error {
-	atCommand := "AT+QCCID"
+	var atCommand string
+	switch model := strings.ToLower(client.modem.Model); model {
+	case "eg25":
+		atCommand = eg25gICCIDATCommand
+	}
 	_, err := client.modem.Port.Write([]byte(atCommand + "\r\n"))
 	if err != nil {
 		return fmt.Errorf("%s command fail, %s", atCommand, err)
@@ -507,7 +530,12 @@ func (client *Client) fetchICCID() error {
 }
 
 func (client *Client) fetchCellInfo() error {
-	atCommand := "AT+QENG=\"servingcell\""
+	var atCommand string
+	model := strings.ToLower(client.modem.Model)
+	switch model {
+	case "eg25":
+		atCommand = eg25gCellInfoCommand
+	}
 	_, err := client.modem.Port.Write([]byte(atCommand + "\r\n"))
 	if err != nil {
 		return fmt.Errorf("%s command fail, %s", atCommand, err)
@@ -529,22 +557,27 @@ func (client *Client) fetchCellInfo() error {
 		return err
 	}
 
-	client.modem.RAT, err = getQuecCellRAT(string(buff))
-	if err != nil {
-		return err
-	}
-
-	switch client.modem.RAT {
-	case "LTE":
-		lteCellInfo, err := getLTECellInfo(string(buff))
+	switch model {
+	case "eg25":
+		client.modem.RAT, err = getQuecCellRAT(string(buff))
 		if err != nil {
 			return err
 		}
-		client.CellInfo = lteCellInfo
-	case "WCDMA":
-		// wcdmainfo, err := parseWCDMAInfo(string(buff))
+
+		switch client.modem.RAT {
+		case "LTE":
+			lteCellInfo, err := getLTECellInfo(string(buff))
+			if err != nil {
+				return err
+			}
+			client.CellInfo = lteCellInfo
+		case "WCDMA":
+			// wcdmainfo, err := parseWCDMAInfo(string(buff))
+		}
+		return nil
+	default:
+		return fmt.Errorf("model is unsupported, got %s", model)
 	}
-	return nil
 }
 
 func (client *Client) fetchModel() error {

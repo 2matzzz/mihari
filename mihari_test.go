@@ -3,6 +3,7 @@ package mihari
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -24,10 +25,6 @@ func TestNewClient(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 	defer client.Close()
-}
-
-func TestPort_GetIMEI(t *testing.T) {
-
 }
 
 func TestGetQuecCellRATMode(t *testing.T) {
@@ -53,10 +50,13 @@ type GetLTECellInfoTestCase struct {
 }
 
 func TestGetLTECellInfo(t *testing.T) {
+	//TODO: flaky test code, it can fail because the parsed timing and the time to run the test are not exactly the same
+	now := time.Now().UTC().UnixMilli()
 	var getLTECellInfoTestCases = []GetLTECellInfoTestCase{
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2734811,235,6100,19,3,3,1684,-81,-10,-54,19,50`,
 			LTECellInfo: LTECellInfo{
+				Timestamp:      now,
 				RAT:            "LTE",
 				State:          "NOCONN",
 				IsTDD:          "FDD",
@@ -79,6 +79,7 @@ func TestGetLTECellInfo(t *testing.T) {
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",-,-,-,-,-,-,-,-,-,-,-,-,-,-`,
 			LTECellInfo: LTECellInfo{
+				Timestamp:      now,
 				RAT:            "LTE",
 				State:          "NOCONN",
 				IsTDD:          "FDD",
@@ -101,6 +102,7 @@ func TestGetLTECellInfo(t *testing.T) {
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2C81851,193,1850,3,5,5,1694,-100,-11,-67,11,29`,
 			LTECellInfo: LTECellInfo{
+				Timestamp:      now,
 				RAT:            "LTE",
 				State:          "NOCONN",
 				IsTDD:          "FDD",
@@ -134,11 +136,11 @@ func TestGetLTECellInfo(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
-	validConfigPath := "example/mihari.yml"
+	validConfigPath := "test/mihari.yml"
 	expectedValidConfig := &Config{
 		Name:        "eg25g",
 		Path:        "/dev/ttyUSB3",
-		Interval:    10,
+		Interval:    60,
 		NewLineCode: "crlf",
 		Parity:      "none",
 		Stopbits:    1,
