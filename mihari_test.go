@@ -44,82 +44,81 @@ func TestGetQuecCellRATMode(t *testing.T) {
 	}
 }
 
-type GetLTECellInfoTestCase struct {
-	ATCommandResp string
-	LTECellInfo
-}
-
 func TestGetLTECellInfo(t *testing.T) {
+	type getLTECellInfoTestCase struct {
+		ATCommandResp string
+		LTECellInfo
+	}
 	//TODO: flaky test code, it can fail because the parsed timing and the time to run the test are not exactly the same
 	now := time.Now().UTC().UnixMilli()
-	var getLTECellInfoTestCases = []GetLTECellInfoTestCase{
+	var getLTECellInfoTestCases = []getLTECellInfoTestCase{
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2734811,235,6100,19,3,3,1684,-81,-10,-54,19,50`,
 			LTECellInfo: LTECellInfo{
-				Timestamp:      now,
-				RAT:            "LTE",
-				State:          "NOCONN",
-				IsTDD:          "FDD",
-				MCC:            440,
-				MNC:            10,
-				CellID:         "2734811",
-				PhysicalCellID: 235,
-				EARFCN:         6100,
-				Band:           19,
-				ULBandwidth:    3,
-				DLBandwidth:    3,
-				Tac:            1684,
-				RSRP:           -81,
-				RSRQ:           -10,
-				RSSI:           -54,
-				SINR:           19,
-				Srxlev:         50,
+				Timestamp:   now,
+				RAT:         "LTE",
+				State:       "NOCONN",
+				IsTDD:       "FDD",
+				MCC:         440,
+				MNC:         10,
+				CellID:      "2734811",
+				PCID:        235,
+				EARFCN:      6100,
+				Band:        19,
+				ULBandwidth: 3,
+				DLBandwidth: 3,
+				Tac:         1684,
+				RSRP:        -81,
+				RSRQ:        -10,
+				RSSI:        -54,
+				SINR:        19,
+				Srxlev:      50,
 			},
 		},
 		{
 			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",-,-,-,-,-,-,-,-,-,-,-,-,-,-`,
 			LTECellInfo: LTECellInfo{
-				Timestamp:      now,
-				RAT:            "LTE",
-				State:          "NOCONN",
-				IsTDD:          "FDD",
-				MCC:            0,
-				MNC:            0,
-				CellID:         "",
-				PhysicalCellID: 0,
-				EARFCN:         0,
-				Band:           0,
-				ULBandwidth:    0,
-				DLBandwidth:    0,
-				Tac:            0,
-				RSRP:           0,
-				RSRQ:           0,
-				RSSI:           0,
-				SINR:           0,
-				Srxlev:         0,
+				Timestamp:   now,
+				RAT:         "LTE",
+				State:       "NOCONN",
+				IsTDD:       "FDD",
+				MCC:         0,
+				MNC:         0,
+				CellID:      "",
+				PCID:        0,
+				EARFCN:      0,
+				Band:        0,
+				ULBandwidth: 0,
+				DLBandwidth: 0,
+				Tac:         0,
+				RSRP:        0,
+				RSRQ:        0,
+				RSSI:        0,
+				SINR:        0,
+				Srxlev:      0,
 			},
 		},
 		{
-			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2C81851,193,1850,3,5,5,1694,-100,-11,-67,11,29`,
+			ATCommandResp: `+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2C81000,193,1850,3,5,5,1694,-100,-11,-67,11,29`,
 			LTECellInfo: LTECellInfo{
-				Timestamp:      now,
-				RAT:            "LTE",
-				State:          "NOCONN",
-				IsTDD:          "FDD",
-				MCC:            440,
-				MNC:            10,
-				CellID:         "2C81851",
-				PhysicalCellID: 193,
-				EARFCN:         1850,
-				Band:           3,
-				ULBandwidth:    5,
-				DLBandwidth:    5,
-				Tac:            1694,
-				RSRP:           -100,
-				RSRQ:           -11,
-				RSSI:           -67,
-				SINR:           11,
-				Srxlev:         29,
+				Timestamp:   now,
+				RAT:         "LTE",
+				State:       "NOCONN",
+				IsTDD:       "FDD",
+				MCC:         440,
+				MNC:         10,
+				CellID:      "2C81000",
+				PCID:        193,
+				EARFCN:      1850,
+				Band:        3,
+				ULBandwidth: 5,
+				DLBandwidth: 5,
+				Tac:         1694,
+				RSRP:        -100,
+				RSRQ:        -11,
+				RSSI:        -67,
+				SINR:        11,
+				Srxlev:      29,
 			},
 		},
 	}
@@ -133,6 +132,92 @@ func TestGetLTECellInfo(t *testing.T) {
 		}
 	}
 
+}
+
+func TestGetWCDMACellInfo(t *testing.T) {
+	type getWCDMACellInfoTestCase struct {
+		ATCommandResp string
+		WCDMACellInfo
+	}
+	//TODO: flaky test code, it can fail because the parsed timing and the time to run the test are not exactly the same
+	now := time.Now().UTC().UnixMilli()
+	var getWCDMACellInfoTestCases = []getWCDMACellInfoTestCase{
+		{
+			ATCommandResp: `+QENG: "servingcell","NOCONN","WCDMA",440,10,75,6FE0090,10736,58,0,-78,-3,-,-,-,-,-`,
+			WCDMACellInfo: WCDMACellInfo{
+				Timestamp:  now,
+				RAT:        "WCDMA",
+				State:      "NOCONN",
+				MCC:        440,
+				MNC:        10,
+				LAC:        "75",
+				CellID:     "6FE0090",
+				UARFCN:     10736,
+				PSC:        58,
+				RAC:        0,
+				RSCP:       -78,
+				ECIO:       -3,
+				PhyCh:      0,
+				SF:         0,
+				Slot:       0,
+				SpeechCode: 0,
+				ComMod:     0,
+			},
+		},
+		{
+			ATCommandResp: `+QENG: "servingcell","NOCONN","WCDMA",440,20,0,ABCDEFF,0,-,-,-,-,-,-,-,-,-`,
+			WCDMACellInfo: WCDMACellInfo{
+				Timestamp:  now,
+				RAT:        "WCDMA",
+				State:      "NOCONN",
+				MCC:        440,
+				MNC:        20,
+				LAC:        "0",
+				CellID:     "ABCDEFF",
+				UARFCN:     0,
+				PSC:        0,
+				RAC:        0,
+				RSCP:       0,
+				ECIO:       0,
+				PhyCh:      0,
+				SF:         0,
+				Slot:       0,
+				SpeechCode: 0,
+				ComMod:     0,
+			},
+		},
+		{
+			ATCommandResp: `+QENG: "servingcell","NOCONN","WCDMA",440,20,-,-,-,-,-,-,-,-,-,-,-,-`,
+			WCDMACellInfo: WCDMACellInfo{
+				Timestamp:  now,
+				RAT:        "WCDMA",
+				State:      "NOCONN",
+				MCC:        440,
+				MNC:        20,
+				LAC:        "-",
+				CellID:     "-",
+				UARFCN:     0,
+				PSC:        0,
+				RAC:        0,
+				RSCP:       0,
+				ECIO:       0,
+				PhyCh:      0,
+				SF:         0,
+				Slot:       0,
+				SpeechCode: 0,
+				ComMod:     0,
+			},
+		},
+	}
+	for _, expect := range getWCDMACellInfoTestCases {
+		actual, err := getWCDMACellInfo(string(expect.ATCommandResp))
+		if err != nil {
+			t.Errorf("%v", err)
+		}
+		if actual != expect.WCDMACellInfo {
+			t.Errorf("got unexpected result, expected: %v, but got %v", expect.WCDMACellInfo, actual)
+		}
+	}
 }
 
 func TestLoadConfig(t *testing.T) {

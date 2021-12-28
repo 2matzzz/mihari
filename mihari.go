@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -68,32 +67,45 @@ type Config struct {
 }
 
 type LTECellInfo struct {
-	Timestamp      int64  `json:"timestamp"` // epoch milli sec
-	RAT            string `json:"rat"`
-	State          string `json:"state"`
-	IsTDD          string `json:"is_tdd"`
-	MCC            int    `json:"mcc,omitempty"`
-	MNC            int    `json:"mnc,omitempty"`
-	CellID         string `json:"cellid,omitempty"`
-	PhysicalCellID int    `json:"pcid,omitempty"`
-	EARFCN         int    `json:"earfcn,omitempty"`
-	Band           int    `json:"freq_band_ind,omitempty"`
-	ULBandwidth    int    `json:"ul_bandwidth,omitempty"`
-	DLBandwidth    int    `json:"dl_bandwidth,omitempty"`
-	Tac            int    `json:"tac,omitempty"`
-	RSRP           int    `json:"rsrp,omitempty"`
-	RSRQ           int    `json:"rsrq,omitempty"`
-	RSSI           int    `json:"rssi,omitempty"`
-	SINR           int    `json:"sinr,omitempty"`
-	Srxlev         int    `json:"srxlev,omitempty"`
+	Timestamp   int64  `json:"timestamp"` // epoch milli sec
+	RAT         string `json:"rat"`
+	State       string `json:"state"`
+	IsTDD       string `json:"is_tdd"`
+	MCC         int    `json:"mcc,omitempty"`
+	MNC         int    `json:"mnc,omitempty"`
+	CellID      string `json:"cellid,omitempty"`
+	PCID        int    `json:"pcid,omitempty"`
+	EARFCN      int    `json:"earfcn,omitempty"`
+	Band        int    `json:"freq_band_ind,omitempty"`
+	ULBandwidth int    `json:"ul_bandwidth,omitempty"`
+	DLBandwidth int    `json:"dl_bandwidth,omitempty"`
+	Tac         int    `json:"tac,omitempty"`
+	RSRP        int    `json:"rsrp,omitempty"`
+	RSRQ        int    `json:"rsrq,omitempty"`
+	RSSI        int    `json:"rssi,omitempty"`
+	SINR        int    `json:"sinr,omitempty"`
+	Srxlev      int    `json:"srxlev,omitempty"`
 }
 
 //TODO: Support 3G
 type WCDMACellInfo struct {
-	MCC    int
-	MNC    int
-	CellID int
-	Band   int
+	Timestamp  int64  `json:"timestamp"` // epoch milli sec
+	RAT        string `json:"rat"`
+	State      string `json:"state"`
+	MCC        int    `json:"mcc"`
+	MNC        int    `json:"mnc"`
+	LAC        string `json:"lac"`
+	CellID     string `json:"cellid"`
+	UARFCN     int    `json:"uarfcn"`
+	PSC        int    `json:"psc"`
+	RAC        int    `json:"rac"`
+	RSCP       int    `json:"rscp"`
+	ECIO       int    `json:"ecio"`
+	PhyCh      int    `json:"phych"`
+	SF         int    `json:"sf"`
+	Slot       int    `json:"slot"`
+	SpeechCode int    `json:"speech_code"`
+	ComMod     int    `json:"com_mod"`
 }
 
 func NewConfig(path string) (*Config, error) {
@@ -214,6 +226,8 @@ func (client *Client) Exec() {
 		switch client.CellInfo.(type) {
 		case LTECellInfo:
 			timestamp = client.CellInfo.(LTECellInfo).Timestamp
+		case WCDMACellInfo:
+			timestamp = client.CellInfo.(WCDMACellInfo).Timestamp
 		}
 
 		//TODO: retry, expnetioal backoff w/ jitter
@@ -222,7 +236,6 @@ func (client *Client) Exec() {
 		req.Header.Set("content-type", "application/json")
 		resp, _ := httpClient.Do(req)
 		ioutil.ReadAll(resp.Body)
-		// log.Println(string(body), err)
 	}
 }
 
@@ -300,139 +313,6 @@ func parseICCID(buff string) (string, error) {
 		return "", fmt.Errorf("ICCID was not responded")
 	}
 	return iccid[1], nil //TODO improve
-}
-
-func parseModel(buff string) (string, string, string, error) {
-	result := make(map[string]string)
-	modelinfo := eg25gModelRegexp.FindStringSubmatch(buff)
-	if len(modelinfo) == 0 {
-		return "", "", "", fmt.Errorf("model info was not responded, modem responded %s", fmt.Sprint(buff))
-	}
-	for i, name := range eg25gModelRegexp.SubexpNames() {
-		if i != 0 && name != "" {
-			result[name] = modelinfo[i]
-		}
-	}
-
-	return result["manufacture"], result["model"], result["firmware_revision"], nil
-}
-
-func getQuecCellRAT(buff string) (string, error) {
-	result := make(map[string]string)
-	modelinfo := eg25gQuecCellModeRegexp.FindStringSubmatch(buff)
-	if len(modelinfo) == 0 {
-		return "", fmt.Errorf("queccell mode info was not responded")
-	}
-	for i, name := range eg25gQuecCellModeRegexp.SubexpNames() {
-		if i != 0 && name != "" {
-			result[name] = modelinfo[i]
-		}
-	}
-
-	return result["rat"], nil
-}
-
-func getLTECellInfo(buff string) (LTECellInfo, error) {
-	var lteCellInfo LTECellInfo
-	var err error
-	match := eg25gQuecCellLTEInfoRegexp.FindStringSubmatch(buff)
-	result := make(map[string]string)
-	if len(match) == 0 {
-		return lteCellInfo, fmt.Errorf("queccell mode info was invalid format, %s", fmt.Sprint(buff))
-	}
-	for i, name := range eg25gQuecCellLTEInfoRegexp.SubexpNames() {
-		if i != 0 && name != "" {
-			// state, is_tdd, mcc, mnc, cellid, pcid, earfcn, freq_band_ind, ul_bandwidth, dl_bandwidth, tac, rsrp, rsrq, rssi, sinr, srxlev
-			result[name] = match[i]
-		}
-	}
-	lteCellInfo.Timestamp = time.Now().UTC().UnixMilli()
-	lteCellInfo.RAT = result["rat"]
-	lteCellInfo.State = result["state"]
-	lteCellInfo.IsTDD = result["is_tdd"]
-	if result["mcc"] != "-" {
-		lteCellInfo.MCC, err = strconv.Atoi(result["mcc"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("mcc is not numeber, got %s", result["mcc"])
-		}
-	}
-	if result["mnc"] != "-" {
-		lteCellInfo.MNC, err = strconv.Atoi(result["mnc"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("mnc is not number, got %s", result["mnc"])
-		}
-	}
-	if result["cellid"] != "-" {
-		lteCellInfo.CellID = result["cellid"]
-	}
-	if result["freq_band_ind"] != "-" {
-		lteCellInfo.Band, err = strconv.Atoi(result["freq_band_ind"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("freq_band_ind is not number, got %s", result["freq_band_ind"])
-		}
-	}
-	if result["pcid"] != "-" {
-		lteCellInfo.PhysicalCellID, err = strconv.Atoi(result["pcid"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("pcid is not number, got %s", result["pcid"])
-		}
-	}
-	if result["earfcn"] != "-" {
-		lteCellInfo.EARFCN, err = strconv.Atoi(result["earfcn"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("earfcn is not number, got %s", result["earfcn"])
-		}
-	}
-	if result["ul_bandwidth"] != "-" {
-		lteCellInfo.ULBandwidth, err = strconv.Atoi(result["ul_bandwidth"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("ul_bandwidth is not number, got %s", result["ul_bandwidth"])
-		}
-	}
-	if result["dl_bandwidth"] != "-" {
-		lteCellInfo.DLBandwidth, err = strconv.Atoi(result["dl_bandwidth"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("dl_bandwidth is not number, got %s", result["dl_bandwidth"])
-		}
-	}
-	if result["tac"] != "-" {
-		lteCellInfo.Tac, err = strconv.Atoi(result["tac"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("tac is not number, got %s", result["tac"])
-		}
-	}
-	if result["rssi"] != "-" {
-		lteCellInfo.RSSI, err = strconv.Atoi(result["rssi"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("rssi is not number, got %s", result["rssi"])
-		}
-	}
-	if result["rsrp"] != "-" {
-		lteCellInfo.RSRP, err = strconv.Atoi(result["rsrp"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("rsrp is not number, got %s", result["rsrp"])
-		}
-	}
-	if result["rsrq"] != "-" {
-		lteCellInfo.RSRQ, err = strconv.Atoi(result["rsrq"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("rsrq is not number, got %s", result["rsrq"])
-		}
-	}
-	if result["sinr"] != "-" {
-		lteCellInfo.SINR, err = strconv.Atoi(result["sinr"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("sinr is not number, got %s", result["sinr"])
-		}
-	}
-	if result["srxlev"] != "-" {
-		lteCellInfo.Srxlev, err = strconv.Atoi(result["srxlev"])
-		if err != nil {
-			return lteCellInfo, fmt.Errorf("srxlev is not number, got %s", result["srxlev"])
-		}
-	}
-
-	return lteCellInfo, nil
 }
 
 func (client *Client) fetchIMEI() error {
@@ -572,7 +452,11 @@ func (client *Client) fetchCellInfo() error {
 			}
 			client.CellInfo = lteCellInfo
 		case "WCDMA":
-			// wcdmainfo, err := parseWCDMAInfo(string(buff))
+			wcdmaCellInfo, err := getWCDMACellInfo(string(buff))
+			if err != nil {
+				return err
+			}
+			client.CellInfo = wcdmaCellInfo
 		}
 		return nil
 	default:
@@ -598,10 +482,12 @@ func (client *Client) fetchModel() error {
 			break
 		}
 	}
+
 	client.modem.Manufacture, client.modem.Model, client.modem.FirmwareRevision, err = parseModel(string(buff))
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
