@@ -2,6 +2,8 @@
 Mihari collects wireless quality of cellular from modem 
 
 ## Data format
+
+LTE
 ```
 {
   "timestamp": 1639997713775,
@@ -25,8 +27,36 @@ Mihari collects wireless quality of cellular from modem
 }
 ```
 
+WCDMA
+```
+{
+  "timestamp": 1639997713775,
+  "rat": "WCDMA",
+  "state": "NOCONN",
+  "mcc": 440,
+  "mnc": 10,
+  "lac": "60",
+  "cellid": "6FD8000",
+  "uarfcn": 1037,
+  "psc": 20,
+  "rac": 0,
+  "rscp": -64,
+  "ecio": -3,
+  "phych": 0,
+  "sf": 0,
+  "slot": 0,
+  "speech_code": 0,
+  "com_mod": 0
+}
+```
+
 ## Supported modem list
 - Quectel EG25
 
 ## Output integration
 - SORACOM Harvest
+
+## TODO
+- CI/CD
+- Package manager
+- More modem support
