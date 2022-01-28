@@ -235,6 +235,8 @@ func (client *Client) Exec() {
 		req, _ := http.NewRequest("POST", soracomHarvestHost, bytes.NewBuffer(body))
 		req.Header.Set("x-soracom-timestamp", fmt.Sprintf("%d", timestamp))
 		req.Header.Set("content-type", "application/json")
+
+		// TODO: error handling
 		resp, _ := httpClient.Do(req)
 		ioutil.ReadAll(resp.Body)
 	}
