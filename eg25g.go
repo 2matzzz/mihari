@@ -1,6 +1,7 @@
 package mihari
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -9,13 +10,20 @@ import (
 
 var (
 	eg25gModelRegexp             = regexp.MustCompile(`(?P<manufacture>.*)\r\n(?P<model>.*)\r\nRevision: (?P<firmware_revision>.*)\r\n`)
-	eg25gQuecCellModeRegexp      = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>(GSM|WCDMA|LTE|CDMAHDR|TDSCDMA))"`)
+	eg25gQuecCellModeRegexp      = regexp.MustCompile(`(SEARCH|LIMSRV|NOCONN|CONNECT)`)
+	eg25gQuecCellRATRegexp       = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>(GSM|WCDMA|LTE|CDMAHDR|TDSCDMA))"`)
 	eg25gQuecCellLTEInfoRegexp   = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>LTE)","(?P<is_tdd>(TDD|FDD))",(?P<mcc>(-|\d{3})),(?P<mnc>(-|\d+)),(?P<cellid>(-|[0-9A-F]+)),(?P<pcid>(-|\d+)),(?P<earfcn>(-|\d+)),(?P<freq_band_ind>(-|\d+)),(?P<ul_bandwidth>(-|[0-5]{1})),(?P<dl_bandwidth>(-|[0-5]{1})),(?P<tac>(-|\d+)),(?P<rsrp>(-(\d+)?)),(?P<rsrq>(-(\d+)?)),(?P<rssi>(-(\d+)?)),(?P<sinr>(-|\d+)),(?P<srxlev>(-|\d+))`)
 	eg25gQuecCellWCDMAInfoRegexp = regexp.MustCompile(`\+QENG: "servingcell","(?P<state>(SEARCH|LIMSRV|NOCONN|CONNECT))","(?P<rat>WCDMA)",(?P<mcc>(-|\d{3})),(?P<mnc>(-|\d+)),(?P<lac>(-|[0-9A-F]+)),(?P<cellid>(-|[0-9A-F]+)),(?P<uarfcn>(-|\d+)),(?P<psc>(-|\d+)),(?P<rac>(-|\d+)),(?P<rscp>(-(\d+)?)),(?P<ecio>(-(\d+)?)),(?P<phych>(-|[0-1]{1})),(?P<sf>(-|[0-8]{1})),(?P<slot>(-|\d+)),(?P<speech_code>(-|\d+)),(?P<com_mod>(-|[0-1]{1}))`)
 	eg25gIMEIATCommand           = "AT+CGSN"
 	eg25gIMSIATCommand           = "AT+CIMI"
 	eg25gICCIDATCommand          = "AT+QCCID"
 	eg25gCellInfoCommand         = "AT+QENG=\"servingcell\""
+)
+
+var (
+	ErrModemNotAttached    = errors.New("modem is not attached")
+	ErrModemNoModeReponded = errors.New("queccell mode info was not responded")
+	ErrModemNoRATResponded = errors.New("queccell rat info was not responded")
 )
 
 func parseModel(buff string) (string, string, string, error) {
@@ -36,13 +44,20 @@ func parseModel(buff string) (string, string, string, error) {
 
 func getQuecCellRAT(buff string) (string, error) {
 	result := make(map[string]string)
-	modelinfo := eg25gQuecCellModeRegexp.FindStringSubmatch(buff)
-	if len(modelinfo) == 0 {
-		return "", fmt.Errorf("queccell mode info was not responded")
+	mode := eg25gQuecCellModeRegexp.FindString(buff)
+	if len(mode) == 0 {
+		return "", ErrModemNoModeReponded
 	}
-	for i, name := range eg25gQuecCellModeRegexp.SubexpNames() {
+	if mode == QuectelModeSearch {
+		return "", ErrModemNotAttached
+	}
+	rat := eg25gQuecCellRATRegexp.FindStringSubmatch(buff)
+	if len(rat) == 0 {
+		return "", ErrModemNoRATResponded
+	}
+	for i, name := range eg25gQuecCellRATRegexp.SubexpNames() {
 		if i != 0 && name != "" {
-			result[name] = modelinfo[i]
+			result[name] = rat[i]
 		}
 	}
 

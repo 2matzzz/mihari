@@ -3,6 +3,7 @@ package mihari
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -22,6 +23,12 @@ var (
 	imeiRegexp               = regexp.MustCompile(`[0-9]{15}`)
 	imsiRegexp               = regexp.MustCompile(`[0-9]{15}`)
 	iccidRegexp              = regexp.MustCompile(`([0-9]{19})F`)
+)
+
+var (
+	ErrNoIMEI  = errors.New("IMEI was not responded")
+	ErrNoIMSI  = errors.New("IMSI was not responded")
+	ErrNoICCID = errors.New("ICCID was not responded")
 )
 
 const (
@@ -212,6 +219,7 @@ func (client *Client) Exec() {
 	// fetch cell info
 	if err := client.fetchCellInfo(); err != nil {
 		log.Printf("cell info fetch error, %v", err)
+		return
 	}
 
 	// forward
@@ -234,6 +242,8 @@ func (client *Client) Exec() {
 		req, _ := http.NewRequest("POST", soracomHarvestHost, bytes.NewBuffer(body))
 		req.Header.Set("x-soracom-timestamp", fmt.Sprintf("%d", timestamp))
 		req.Header.Set("content-type", "application/json")
+
+		// TODO: error handling
 		resp, _ := httpClient.Do(req)
 		ioutil.ReadAll(resp.Body)
 	}
@@ -294,7 +304,7 @@ func (client *Client) Check() error {
 func parseIMEI(buff string) (string, error) {
 	match := imeiRegexp.FindAllString(buff, -1)
 	if len(match) == 0 {
-		return "", fmt.Errorf("IMEI was not responded")
+		return "", ErrNoIMEI
 	}
 	return match[0], nil
 }
@@ -302,7 +312,7 @@ func parseIMEI(buff string) (string, error) {
 func parseIMSI(buff string) (string, error) {
 	imsi := imsiRegexp.FindAllString(buff, -1)
 	if len(imsi) == 0 {
-		return "", fmt.Errorf("IMSI was not responded")
+		return "", ErrNoIMSI
 	}
 	return imsi[0], nil //TODO improve
 }
@@ -310,7 +320,7 @@ func parseIMSI(buff string) (string, error) {
 func parseICCID(buff string) (string, error) {
 	iccid := iccidRegexp.FindStringSubmatch(buff)
 	if len(iccid) == 0 {
-		return "", fmt.Errorf("ICCID was not responded")
+		return "", ErrNoICCID
 	}
 	return iccid[1], nil //TODO improve
 }
