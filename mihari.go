@@ -212,6 +212,7 @@ func (client *Client) Exec() {
 	// fetch cell info
 	if err := client.fetchCellInfo(); err != nil {
 		log.Printf("cell info fetch error, %v", err)
+		return
 	}
 
 	// forward
