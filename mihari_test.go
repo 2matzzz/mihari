@@ -15,17 +15,18 @@ func TestNewConfig(t *testing.T) {
 	t.Logf("%#v", config)
 }
 
-func TestNewClient(t *testing.T) {
-	config, err := NewConfig("example/mihari.yml")
-	if err != nil {
-		t.Errorf("%v", err)
-	}
-	client, err := NewClient(config)
-	if err != nil {
-		t.Errorf("%v", err)
-	}
-	defer client.Close()
-}
+//TODO: mock
+// func TestNewClient(t *testing.T) {
+// 	config, err := NewConfig("example/mihari.yml")
+// 	if err != nil {
+// 		t.Errorf("%v", err)
+// 	}
+// 	client, err := NewClient(config)
+// 	if err != nil {
+// 		t.Errorf("%v", err)
+// 	}
+// 	defer client.Close()
+// }
 
 func TestGetQuecCellRATMode(t *testing.T) {
 	validCommandResp := []byte(`+QENG: "servingcell","NOCONN","LTE","FDD",440,10,2734811,235,6100,19,3,3,1684,-81,-10,-54,19,50`)
